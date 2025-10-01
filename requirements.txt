@@ -1,0 +1,10 @@
+# pinned minimal dependencies
+fastapi==0.95.2
+uvicorn[standard]==0.22.0
+pydantic==1.10.12
+# allow pytest to resolve compatible version with environment
+pytest
+httpx==0.24.1
+python-multipart==0.0.6
+groq
+python-dotenv

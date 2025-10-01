@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+venv/
+.env
+cloudflared/cert.pem
+cloudflared/credentials.json
+.env
+__pycache__/
+*.py[cod]
+.env
+.env.*
+*.sqlite3
+venv/
+.idea/
+.vscode/
+*.log

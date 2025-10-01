@@ -1,0 +1,10 @@
+# Sample cloudflared config. You must create a tunnel in Cloudflare and
+# place the generated credentials file (cert.pem or credentials file) in this folder.
+
+tunnel: "REPLACE_WITH_TUNNEL_ID"
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  - hostname: "example.mydomain.com"
+    service: http://web:8000
+  - service: http_status:404
