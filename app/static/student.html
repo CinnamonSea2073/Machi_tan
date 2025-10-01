@@ -1,0 +1,685 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no" />
+  <title>生徒画面 - Machi_tan</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    body{margin:0;padding:0;overflow:hidden}
+    #map{width:100vw;height:100vh}
+    .voice-button{
+      position:fixed;left:50%;transform:translateX(-50%);bottom:32px;
+      background:#1976d2;color:#fff;padding:18px 28px;border-radius:50px;
+      border:none;font-size:16px;font-weight:600;box-shadow:0 4px 12px rgba(25,118,210,0.4);
+      cursor:pointer;user-select:none;touch-action:none;z-index:1000;
+      transition:all 0.2s
+    }
+    .voice-button:active{background:#1565c0;transform:translateX(-50%) scale(0.95)}
+    .recording{background:#d32f2f !important;animation:pulse 1s infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.7}}
+    /* Next destination marker (prominent dot) */
+    .next-dest-marker{
+      width:26px;height:26px;border-radius:26px;background:#ffb300;border:3px solid #fff;box-shadow:0 0 12px rgba(255,179,0,0.6)
+    }
+    /* Debug marker style */
+    .debug-marker{
+      width:22px;height:22px;border-radius:22px;background:#e91e63;border:2px solid #fff;box-shadow:0 0 10px rgba(233,30,99,0.6)
+    }
+  </style>
+</head>
+<body>
+  <!-- Tutorial screen (fullscreen, shown first) -->
+  <div id="tutorialScreen" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:sans-serif;padding:24px;box-sizing:border-box">
+    <div id="tutorialContent" style="max-width:600px;text-align:center;background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);padding:48px 32px;border-radius:20px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+      <h1 id="tutorialTitle" style="font-size:28px;margin-bottom:24px;font-weight:700">ようこそ、隊員!</h1>
+      <p id="tutorialMessage" style="font-size:18px;line-height:1.6;margin-bottom:32px">画面をタップして進めてください。</p>
+      <button id="tutorialNextBtn" style="background:#fff;color:#667eea;padding:14px 36px;border:none;border-radius:50px;font-size:16px;font-weight:600;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.15);transition:all 0.2s">次へ →</button>
+    </div>
+  </div>
+
+  <!-- Debug panel (shown only when status is デバッグ) -->
+  <div id="debugPanel" style="position:fixed;left:12px;top:12px;z-index:10000;background:rgba(0,0,0,0.85);color:#fff;padding:16px;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.3);font-size:14px;display:none">
+    <h3 style="margin:0 0 12px 0;font-size:16px;font-weight:600">🔧 デバッグパネル</h3>
+    <button id="debugShowTutorial" style="display:block;width:100%;margin-bottom:8px;padding:8px 12px;background:#4caf50;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px">チュートリアルを再表示</button>
+    <button id="debugShowMap" style="display:block;width:100%;padding:8px 12px;background:#2196f3;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px">地図ページへ移動</button>
+  </div>
+
+  <div id="map" style="display:none"></div>
+  <button id="voiceBtn" class="voice-button" style="display:none">🎤 長押しで報告</button>
+  <!-- Level meter for debugging -->
+  <div id="levelMeterRoot" style="position:fixed;right:18px;top:18px;z-index:1200;display:none">
+    <div id="levelMeter" style="width:160px;height:12px;background:#eee;border-radius:8px;overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,0.08)"></div>
+    <div id="levelDebug" style="margin-top:6px;text-align:right;font-size:12px;color:#333;min-width:160px">--</div>
+  </div>
+
+  <div id="modalRoot"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/static/common.js"></script>
+  <script>
+    // Tutorial story messages
+    const tutorialStory = [
+      { title: 'ようこそ、隊員!', message: 'あなたは新米の探検隊員です。これから大切なミッションに挑戦します。' },
+      { title: 'ミッション開始', message: '隊長からの指示を受け、地図上でルートを確認しながら進んでいきます。' },
+      { title: '音声レポート', message: '何か発見したら、🎤ボタンを長押しして音声で報告してください。' },
+      { title: '準備完了!', message: 'それでは、まずあなたの名前を教えてください。' }
+    ]
+    let tutorialStep = 0
+
+    function showTutorialStep(step) {
+      if (step >= tutorialStory.length) {
+        // show name registration form
+        showNameRegistration()
+        return
+      }
+      const s = tutorialStory[step]
+      document.getElementById('tutorialTitle').textContent = s.title
+      document.getElementById('tutorialMessage').textContent = s.message
+    }
+
+    function showNameRegistration() {
+      const content = document.getElementById('tutorialContent')
+      content.innerHTML = `
+        <h1 style="font-size:28px;margin-bottom:24px;font-weight:700">名前を登録</h1>
+        <p style="font-size:16px;margin-bottom:20px">あなたの名前を入力してください</p>
+        <input type="text" id="studentNameInput" placeholder="例: 山田太郎" style="width:100%;max-width:300px;padding:12px 16px;border:none;border-radius:8px;font-size:16px;margin-bottom:20px;box-sizing:border-box" />
+        <button id="registerNameBtn" style="background:#fff;color:#667eea;padding:14px 36px;border:none;border-radius:50px;font-size:16px;font-weight:600;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.15);transition:all 0.2s">登録して開始</button>
+      `
+      document.getElementById('registerNameBtn').addEventListener('click', registerStudent)
+    }
+
+    async function registerStudent() {
+      const name = document.getElementById('studentNameInput').value.trim()
+      if (!name) {
+        alert('名前を入力してください')
+        return
+      }
+      try {
+        // Call API to register student and get UUID
+        const res = await fetch('/api/students', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name })
+        })
+        if (!res.ok) throw new Error('登録に失敗しました')
+        const data = await res.json()
+        const studentUuid = data.student_id
+        // Store UUID in localStorage
+        localStorage.setItem('studentUuid', studentUuid)
+        localStorage.setItem('studentName', name)
+        // Hide tutorial and show map
+        document.getElementById('tutorialScreen').style.display = 'none'
+        document.getElementById('map').style.display = 'block'
+        document.getElementById('voiceBtn').style.display = 'block'
+        document.getElementById('levelMeterRoot').style.display = 'block'
+        // Initialize map after tutorial
+        initMap()
+        // load today's course onto the map
+        loadTodayCourse()
+      } catch (err) {
+        console.error(err)
+        alert('登録エラー: ' + err.message)
+      }
+    }
+
+    document.getElementById('tutorialNextBtn').addEventListener('click', () => {
+      tutorialStep++
+      showTutorialStep(tutorialStep)
+    })
+
+    async function saveComment(text){
+      const studentUuid = localStorage.getItem('studentUuid') || null
+      // capture current location if available
+      let lat = null, lon = null
+      try{
+        if(posCircle){ const c = posCircle.getLatLng(); lat = c.lat; lon = c.lng }
+        else if(map && map.getCenter){ const c = map.getCenter(); lat = c.lat; lon = c.lng }
+      }catch(e){ /* ignore */ }
+      const payload = { user_id: studentUuid ? studentUuid : 'anonymous', text: text, student_id: studentUuid, lat: lat, lon: lon }
+      console.log('[saveComment] payload=', payload)
+      const res = await fetch('/api/comments', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)})
+      if(!res.ok) throw new Error('コメント保存失敗')
+      const j = await res.json()
+      console.log('[saveComment] saved', j)
+      // add marker immediately
+      try{ if(j && j.comment_id){ addCommentMarker(j) } }catch(e){console.warn('addCommentMarker failed', e)}
+      return j
+    }
+
+
+    // comment markers
+    let commentMarkers = {}
+
+    function addCommentMarker(comment){
+      try{
+        // accept 0 coordinates; check for null/undefined explicitly
+        const lat = (comment.lat !== undefined && comment.lat !== null) ? Number(comment.lat) : null
+        const lon = (comment.lon !== undefined && comment.lon !== null) ? Number(comment.lon) : null
+        if(lat === null || lon === null) return
+        if(Number.isNaN(lat) || Number.isNaN(lon)) return
+        // avoid duplicate
+        if(commentMarkers[comment.comment_id]) return
+        const starIcon = L.divIcon({className:'', html:'★', iconSize:[24,24], iconAnchor:[12,12]})
+        const m = L.marker([lat, lon], { icon: starIcon }).addTo(map)
+        m.bindPopup(`<strong>${comment.student_name || comment.user_id}</strong><br>${comment.text}`)
+        commentMarkers[comment.comment_id] = m
+      }catch(e){console.warn('addCommentMarker error', e)}
+    }
+
+    async function loadExistingComments(){
+      try{
+        const res = await fetch('/api/comments/with_students')
+        if(!res.ok) return
+        const arr = await res.json()
+        arr.forEach(c => addCommentMarker(c))
+      }catch(e){console.warn('loadExistingComments failed', e)}
+    }
+
+    // poll for new comments every N seconds and add markers for unseen ones
+    let lastCommentPoll = null
+    async function pollNewComments(){
+      try{
+        const res = await fetch('/api/comments')
+        if(!res.ok) return
+        const arr = await res.json()
+        for(const c of arr){
+          if(!commentMarkers[c.comment_id]) addCommentMarker(c)
+        }
+      }catch(e){console.warn('pollNewComments failed', e)}
+    }
+
+    // start polling when map is initialized
+    setInterval(()=>{ if(mapInitialized) pollNewComments() }, 5000)
+
+    // Check if student already registered
+    if (localStorage.getItem('studentUuid')) {
+      // skip tutorial
+      document.getElementById('tutorialScreen').style.display = 'none'
+      document.getElementById('map').style.display = 'block'
+      document.getElementById('voiceBtn').style.display = 'block'
+      document.getElementById('levelMeterRoot').style.display = 'block'
+    } else {
+      // show tutorial
+      showTutorialStep(tutorialStep)
+    }
+
+    // map setup - centered on Tokyo, will update with real location
+    let mapInitialized = false
+    let map = null
+    let posCircle = null
+  let todayRouteLayer = null
+    // current position marker update function (moved to top-level so debug can call it)
+    function updatePos(lat,lon){
+      try{
+        if(!map) return
+        if(posCircle) {try{map.removeLayer(posCircle)}catch(e){}
+        }
+        posCircle = L.circle([lat,lon], {radius:12, color:'#00b0ff', fillColor:'#aee6ff', fillOpacity:0.6}).addTo(map)
+        try{ map.panTo([lat,lon]) }catch(e){}
+        // when we have route coords, evaluate proximity to next dest
+        evaluateProximity(lat, lon)
+      }catch(e){console.warn('updatePos error', e)}
+    }
+    // staged reveal state
+    let routeCoords = []
+    let revealedIndex = -1 // index of last revealed point
+    let visitedLine = null
+    let nextDestMarker = null
+    // debug marker (only when status == デバッグ)
+    let debugMarker = null
+    let debugMode = false
+
+    function initMap() {
+      if (mapInitialized) return
+      mapInitialized = true
+      map = L.map('map', {
+        zoomControl: true,
+        attributionControl: true
+      }).setView([35.6812, 139.7671], 15);
+      
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap'
+      }).addTo(map);
+
+      // current position marker (blue circle) is handled by top-level updatePos()
+
+      if(navigator.geolocation){
+        navigator.geolocation.getCurrentPosition(p=>updatePos(p.coords.latitude,p.coords.longitude))
+        navigator.geolocation.watchPosition(p=>updatePos(p.coords.latitude,p.coords.longitude))
+      }
+      // load existing comment markers
+      setTimeout(()=>{ try{ loadExistingComments() }catch(e){} }, 500)
+      // also enable debug marker placement when in debug mode
+      map.on('click', e => {
+        if(!debugMode) return
+        placeDebugMarker(e.latlng.lat, e.latlng.lng)
+      })
+    }
+
+    function setCurrentPositionForDebug(lat, lon){
+      // emulate current position using debug marker
+      updatePos(lat, lon)
+    }
+
+
+    // Load today's course (if set) and draw on the student map
+    async function loadTodayCourse(){
+      try{
+        const res = await fetch('/api/class_course')
+        if(!res.ok) return
+        const t = await res.json()
+        const courseId = t.course_id || t.course_of_day || null
+        if(!courseId) return
+        // fetch course GPX
+        const r = await fetch(`/api/courses/${courseId}`)
+        if(!r.ok) return
+        const courseData = await r.json()
+        const gpxContent = courseData.gpx || courseData.content || courseData.gpx_content
+        if(!gpxContent) return
+        // parse GPX and extract track points
+        const parser = new DOMParser()
+        const gpxDoc = parser.parseFromString(gpxContent, 'text/xml')
+        const trackPoints = gpxDoc.querySelectorAll('trkpt')
+        if(!trackPoints || trackPoints.length === 0) return
+        const coords = []
+        trackPoints.forEach(pt=>{
+          const lat = parseFloat(pt.getAttribute('lat'))
+          const lon = parseFloat(pt.getAttribute('lon'))
+          if(!isNaN(lat) && !isNaN(lon)) coords.push([lat, lon])
+        })
+        if(coords.length === 0) return
+        // store coords for staged reveal
+        routeCoords = coords
+        revealedIndex = -1
+        // remove any full-route layer if exists
+        if(todayRouteLayer){ try{ map.removeLayer(todayRouteLayer) }catch(e){} todayRouteLayer = null }
+        // remove visited line and markers
+        if(visitedLine){ try{ map.removeLayer(visitedLine) }catch(e){} visitedLine = null }
+        if(nextDestMarker){ try{ map.removeLayer(nextDestMarker) }catch(e){} nextDestMarker = null }
+        // show only the next destination (first point)
+        showNextDestination()
+      }catch(err){
+        console.warn('loadTodayCourse failed', err)
+      }
+    }
+
+    // If already registered, init map immediately
+    if (localStorage.getItem('studentUuid')) {
+      initMap()
+      loadTodayCourse()
+    }
+
+    // compute distance in meters between two lat/lon
+    function haversineDistance(lat1, lon1, lat2, lon2){
+      const R = 6371000 // meters
+      const toRad = v => v * Math.PI / 180
+      const dLat = toRad(lat2 - lat1)
+      const dLon = toRad(lon2 - lon1)
+      const a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)*Math.sin(dLon/2)
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+      return R * c
+    }
+
+    // show the next unrevealed destination as a prominent marker
+    function showNextDestination(){
+      if(!routeCoords || routeCoords.length === 0) return
+      const nextIndex = revealedIndex + 1
+      if(nextIndex >= routeCoords.length){
+        // all revealed — show full route
+        revealFullRoute()
+        return
+      }
+      const [lat, lon] = routeCoords[nextIndex]
+      // remove existing next marker
+      if(nextDestMarker){ try{ map.removeLayer(nextDestMarker) }catch(e){} nextDestMarker = null }
+      // use a divIcon for prominent styling
+      const icon = L.divIcon({className: '', html: '<div class="next-dest-marker"></div>', iconSize: [26,26]})
+      nextDestMarker = L.marker([lat, lon], { icon }).addTo(map)
+      // ensure it's visible
+      try{ map.panTo([lat, lon]) }catch(e){}
+    }
+
+    // reveal the path up to given index (inclusive) as visitedLine
+    function revealUpToIndex(idx){
+      if(idx < 0) return
+      const pts = routeCoords.slice(0, idx+1)
+      if(visitedLine){ try{ map.removeLayer(visitedLine) }catch(e){} visitedLine = null }
+      visitedLine = L.polyline(pts, { color: '#00b0ff', weight: 4, opacity: 0.9 }).addTo(map)
+    }
+
+    // when reaching final reveal, show full route
+    function revealFullRoute(){
+      if(todayRouteLayer) return
+      if(routeCoords.length === 0) return
+      todayRouteLayer = L.polyline(routeCoords, { color: '#1976d2', weight: 4, opacity: 0.9 }).addTo(map)
+      // remove nextDestMarker and leave visitedLine as-is
+      if(nextDestMarker){ try{ map.removeLayer(nextDestMarker) }catch(e){} nextDestMarker = null }
+      try{ map.fitBounds(todayRouteLayer.getBounds(), { padding: [20,20] }) }catch(e){}
+    }
+
+    // evaluate proximity from current position to next destination
+    function evaluateProximity(lat, lon){
+      if(!routeCoords || routeCoords.length === 0) return
+      const nextIndex = revealedIndex + 1
+      if(nextIndex >= routeCoords.length) return
+      const [dlat, dlon] = routeCoords[nextIndex]
+      const dist = haversineDistance(lat, lon, dlat, dlon)
+      // threshold for considering 'arrived' (meters) — generous radius
+      const ARRIVE_THRESHOLD = 20
+      // reveal visited line from start up to current revealedIndex if any
+      if(dist <= ARRIVE_THRESHOLD){
+        // mark this node as revealed
+        revealedIndex = nextIndex
+        // draw visited line up to revealedIndex
+        revealUpToIndex(revealedIndex)
+        // show next destination
+        showNextDestination()
+        // if we've revealed the last point, show full route
+        if(revealedIndex >= routeCoords.length - 1){
+          revealFullRoute()
+        }
+      }
+    }
+
+    // debug marker placement (single marker only)
+    function placeDebugMarker(lat, lon){
+      // only allowed in debug mode
+      if(!debugMode) return
+      // remove previous debug marker
+      if(debugMarker){ try{ map.removeLayer(debugMarker) }catch(e){} debugMarker = null }
+      const icon = L.divIcon({className:'', html: '<div class="debug-marker"></div>', iconSize:[22,22]})
+      debugMarker = L.marker([lat, lon], { icon }).addTo(map)
+      // treat debug marker as current position
+      setCurrentPositionForDebug(lat, lon)
+    }
+
+    // Debug panel logic: show only if status is デバッグ
+    async function checkDebugMode() {
+      try {
+        const res = await fetch('/api/status')
+        if (!res.ok) return
+        const data = await res.json()
+        const currentStatus = data.status || ''
+        if (currentStatus === 'デバッグ') {
+          document.getElementById('debugPanel').style.display = 'block'
+          debugMode = true
+          ensureDebugControls()
+        } else {
+          document.getElementById('debugPanel').style.display = 'none'
+          debugMode = false
+        }
+      } catch (err) {
+        console.warn('Failed to fetch status for debug panel', err)
+      }
+    }
+    checkDebugMode()
+    // Re-check every 10 seconds
+    setInterval(checkDebugMode, 10000)
+
+    document.getElementById('debugShowTutorial').addEventListener('click', () => {
+      // Clear localStorage and reload to show tutorial
+      localStorage.removeItem('studentUuid')
+      localStorage.removeItem('studentName')
+      location.reload()
+    })
+
+    document.getElementById('debugShowMap').addEventListener('click', () => {
+      // Hide tutorial and show map
+      document.getElementById('tutorialScreen').style.display = 'none'
+      document.getElementById('map').style.display = 'block'
+      document.getElementById('voiceBtn').style.display = 'block'
+      document.getElementById('levelMeterRoot').style.display = 'block'
+      if (!mapInitialized) initMap()
+      // ensure today's course is visible in debug map
+      loadTodayCourse()
+    })
+
+    function ensureDebugControls(){
+      // add a button to place a debug marker if not already present
+      if(document.getElementById('placeDebugMarkerBtn')) return
+      const btn = document.createElement('button')
+      btn.id = 'placeDebugMarkerBtn'
+      btn.textContent = 'デバッグ: 現在位置をセット'
+      btn.style.display = 'block'
+      btn.style.marginTop = '8px'
+      btn.style.padding = '8px 12px'
+      btn.style.background = '#e91e63'
+      btn.style.color = '#fff'
+      btn.style.border = 'none'
+      btn.style.borderRadius = '6px'
+      btn.style.cursor = 'pointer'
+      document.getElementById('debugPanel').appendChild(btn)
+      btn.addEventListener('click', ()=>{
+        if(!mapInitialized) initMap()
+        // place marker at map center
+        const center = map.getCenter()
+        placeDebugMarker(center.lat, center.lng)
+      })
+    }
+
+  // voice recording: MediaRecorder + analyser for silence detection
+  let mediaStream=null, recorder=null, chunks=[], analyser=null, audioCtx=null, sourceNode=null
+    const btn=document.getElementById('voiceBtn')
+    btn.addEventListener('mousedown', startRecording)
+    btn.addEventListener('mouseup', stopRecording)
+    btn.addEventListener('touchstart', startRecording)
+    btn.addEventListener('touchend', stopRecording)
+
+    async function startRecording(e){
+      e.preventDefault()
+      try{
+        btn.textContent = '🔴 録音中...離すと送信'
+        btn.classList.add('recording')
+        if(!mediaStream){
+          mediaStream = await navigator.mediaDevices.getUserMedia({audio:true})
+        }
+        // ensure audio context and analyser exist (recreate if closed earlier)
+        // Always (re)create the audio context, source and analyser so
+        // they are fresh for every recording. Previously we only created
+        // an analyser once and closed the AudioContext on stop which left
+        // the analyser bound to a closed context and caused the meter to
+        // stop updating on subsequent recordings.
+        try{
+          if(audioCtx){ try{ audioCtx.close() }catch(_){} }
+        }catch(e){}
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)()
+        try{
+          sourceNode = audioCtx.createMediaStreamSource(mediaStream)
+        }catch(e){ console.warn('createMediaStreamSource failed', e); sourceNode = null }
+        analyser = audioCtx.createAnalyser()
+        analyser.fftSize = 2048
+        try{
+          if(sourceNode && analyser) sourceNode.connect(analyser)
+        }catch(e){/* ignore */}
+        // perform a short ambient calibration to set dynamic threshold
+        await calibrateAmbient(300)
+        // reset peak tracker for this recording session
+        maxRms = 0
+        recorder = new MediaRecorder(mediaStream)
+        chunks=[]
+        recorder.ondataavailable = ev=>chunks.push(ev.data)
+        recorder.start()
+        // start measuring volume periodically
+        measureSilence()
+      }catch(err){
+        console.error(err)
+        alert('マイクへのアクセスが許可されていません')
+        btn.textContent = '🎤 長押しで報告'
+        btn.classList.remove('recording')
+      }
+    }
+
+    // simple RMS-based silence measurement
+    let _measuring = false
+    let lastRms = 0
+    let maxRms = 0
+    let ambientRms = 0
+    let dynamicThreshold = 0.005
+    // keep rolling previous values to avoid wild threshold jumps between
+    // successive calibrations in the same session
+    window._prevAmbientRms = window._prevAmbientRms || null
+    window._prevDynamicThreshold = window._prevDynamicThreshold || null
+    async function calibrateAmbient(durationMs=300){
+  if(!analyser || !audioCtx) return
+      const tmp = new Float32Array(analyser.fftSize)
+      const samples = []
+      const start = performance.now()
+      while(performance.now() - start < durationMs){
+        analyser.getFloatTimeDomainData(tmp)
+        let sum = 0
+        for(let i=0;i<tmp.length;i++){ const v=tmp[i]; sum += v*v }
+        const rms = Math.sqrt(sum/tmp.length)
+        samples.push(rms)
+        await new Promise(r=>setTimeout(r, 20))
+      }
+      // Use a robust lower-side estimate so that short spikes during
+      // calibration don't push the ambient estimate too high. We take a
+      // trimmed/quantile approach: compute the mean of the lower half of
+      // samples (which ignores momentary loud noises), then smooth with
+      // the previous ambient to avoid wild jumps.
+      samples.sort((a,b)=>a-b)
+      const half = Math.floor(samples.length/2) || 1
+      let sumLow = 0
+      for(let i=0;i<half;i++){ sumLow += samples[i] }
+      const lowerMean = sumLow / half
+      let ambientCandidate = lowerMean
+      // smooth with previous ambient if present
+      if(typeof window._prevAmbientRms === 'number' && window._prevAmbientRms > 0){
+        ambientRms = window._prevAmbientRms * 0.7 + ambientCandidate * 0.3
+      }else{
+        ambientRms = ambientCandidate
+      }
+      window._prevAmbientRms = ambientRms
+
+      // dynamic threshold = ambient * factor, with a small floor. Also
+      // prevent sudden large increases by capping growth relative to the
+      // previous threshold.
+      const newThreshold = Math.max(ambientRms * 3.0, 0.0003)
+      if(typeof window._prevDynamicThreshold === 'number' && window._prevDynamicThreshold > 0){
+        // allow at most 3x increase per calibration to avoid jumping above
+        // real speech levels if calibration was noisy
+        dynamicThreshold = Math.min(newThreshold, window._prevDynamicThreshold * 3)
+      }else{
+        dynamicThreshold = newThreshold
+      }
+      window._prevDynamicThreshold = dynamicThreshold
+      console.log('[calibrateAmbient] ambientRms=', ambientRms, 'threshold=', dynamicThreshold)
+    }
+
+    function updateMeter(rms){
+      try{
+        const el = document.getElementById('levelMeter')
+        const dbg = document.getElementById('levelDebug')
+        if(el){
+          // Visualize relative to the dynamic threshold so small absolute
+          // RMS values are still visible. We compute ratio = rms/threshold
+          // and color the bar: green when >=1, yellow around 0.6-1, purple
+          // otherwise.
+          const denom = (dynamicThreshold || 0.0003)
+          const ratio = rms / denom
+          const pct = Math.min(1, Math.sqrt(Math.max(0, ratio)) * 0.95)
+          let color = '#7c4dff'
+          if(ratio >= 1) color = '#4caf50' // green
+          else if(ratio >= 0.6) color = '#ffb300' // amber
+          else color = '#7c4dff' // purple/primary
+          el.style.background = `linear-gradient(90deg, ${color} ${(pct*100)}%, #eee ${(pct*100)}%)`
+          }
+        if(dbg){
+          dbg.textContent = `rms:${rms.toFixed(5)} ambient:${ambientRms.toFixed(5)} thr:${dynamicThreshold.toFixed(5)}`
+        }
+      }catch(e){/* ignore */}
+    }
+
+    function measureSilence(){
+      if(!analyser || !audioCtx) return
+      _measuring = true
+      const buf = new Float32Array(analyser.fftSize)
+      const loop = ()=>{
+        analyser.getFloatTimeDomainData(buf)
+        let sum = 0
+        for(let i=0;i<buf.length;i++){ const v=buf[i]; sum += v*v }
+        const rms = Math.sqrt(sum / buf.length)
+        lastRms = rms
+        // update peak for session (helps when stop moment is quiet)
+        if(rms > maxRms) maxRms = rms
+        // update meter every frame
+        updateMeter(rms)
+        if(_measuring) requestAnimationFrame(loop)
+      }
+      requestAnimationFrame(loop)
+    }
+
+    async function stopRecording(e){
+      e.preventDefault()
+      btn.textContent = '📤 送信中...'
+      btn.classList.remove('recording')
+      if(!recorder) return
+
+      // Ensure onstop handler is set before calling stop() to avoid race condition
+      recorder.onstop = async ()=>{
+        try{
+          _measuring = false
+          if(sourceNode){ try{ sourceNode.disconnect() }catch(_){} sourceNode=null }
+          if(audioCtx){ try{ audioCtx.close() }catch(_){} audioCtx=null }
+          if(!chunks || chunks.length === 0){
+            throw new Error('録音データがありません')
+          }
+          const blob = new Blob(chunks, {type: recorder.mimeType || 'audio/webm'})
+          // if RMS is very low compared to dynamic threshold, treat as silence and offer retry
+          console.log('[stopRecording] lastRms=', lastRms, 'maxRms=', maxRms, 'dynamicThreshold=', dynamicThreshold)
+          // Decide using both the end RMS and the peak RMS during recording.
+          // If neither the final level nor the peak exceed the threshold
+          // (allowing a small headroom for peak), treat as silence.
+          const peakRequired = dynamicThreshold * 0.8
+          if(lastRms < dynamicThreshold && maxRms < peakRequired){
+            // show retry modal
+            showRetryModal()
+            return
+          }
+          const fd = new FormData(); fd.append('file', blob, 'voice.webm')
+          // send to /api/groq/audio
+          const res = await fetch('/api/groq/audio', {method:'POST', body:fd})
+          if(!res.ok) throw new Error('音声送信失敗')
+          const j = await res.json()
+          const transcript = (j.transcript || '').trim()
+
+          if(!transcript){
+            // 空結果はユーザーへわかりやすく伝える
+            showModal(`<strong>音声認識できませんでした</strong><br>もう一度ゆっくり話してみてください。`)
+            return
+          }
+
+          // now call /api/groq/text to get reply
+          const r2 = await fetch('/api/groq/text', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({text:transcript})})
+          if(!r2.ok) throw new Error('返信取得失敗')
+          const jr = await r2.json()
+          showModal(`<strong>あなたの報告:</strong><br>${transcript}<br><br><strong>隊長の返事:</strong><br>${jr.output || '応答がありません'}`)
+          // Also save the transcript as a comment so teachers can see it
+          try{
+            await saveComment(transcript)
+          }catch(err){
+            console.warn('saveComment failed', err)
+          }
+        }catch(err){
+          console.error(err)
+          alert('送信に失敗しました: ' + err.message)
+        }finally{
+          btn.textContent = '🎤 長押しで報告'
+        }
+      }
+
+      // now stop the recorder (onstop is already set)
+      try{
+        recorder.stop()
+      }catch(err){
+        console.error('recorder.stop error', err)
+        btn.textContent = '🎤 長押しで報告'
+      }
+    }
+
+  </script>
+</body>
+</html>

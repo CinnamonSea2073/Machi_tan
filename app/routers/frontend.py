@@ -1,6 +1,14 @@
 from fastapi import APIRouter, Response
+from pathlib import Path
 
 router = APIRouter()
+
+STATIC_DIR = Path(__file__).resolve().parent.parent / 'static'
+
+
+def _read_static(name: str) -> str:
+    p = STATIC_DIR / name
+    return p.read_text(encoding='utf-8')
 
 
 @router.get("/")
@@ -10,84 +18,22 @@ async def index():
     <html>
       <head>
         <meta charset='utf-8' />
-        <title>Machi_tan - Comments</title>
-        <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-        <style>
-          body { font-family: Arial, sans-serif; max-width: 800px; margin: 2rem auto; }
-          .comment { border-bottom: 1px solid #ddd; padding: .5rem 0; }
-          .meta { color: #666; font-size: .9rem; }
-        </style>
+        <title>Machi_tan</title>
       </head>
-      <body>
-        <div id="app">
-          <h1>Comments</h1>
-
-          <form @submit.prevent="submit">
-            <div>
-              <label>Author</label><br>
-              <input v-model="author" required />
-            </div>
-            <div>
-              <label>Comment</label><br>
-              <textarea v-model="text" required></textarea>
-            </div>
-            <div>
-              <button type="submit">Post</button>
-            </div>
-          </form>
-
-          <h2>Recent</h2>
-          <div v-if="loading">Loading...</div>
-          <div v-else>
-            <div v-if="comments.length === 0">No comments yet</div>
-            <div v-for="c in comments" :key="c.id" class="comment">
-              <div><strong>{{ c.author }}</strong></div>
-              <div class="meta">{{ c.created_at }}</div>
-              <div>{{ c.text }}</div>
-            </div>
-          </div>
-        </div>
-
-        <script>
-        const { createApp } = Vue
-
-        createApp({
-          data() {
-            return { author: '', text: '', comments: [], loading: true }
-          },
-          methods: {
-            async load() {
-              this.loading = true
-              try {
-                const res = await fetch('/api/comments')
-                this.comments = await res.json()
-              } finally {
-                this.loading = false
-              }
-            },
-            async submit() {
-              if (!this.author || !this.text) return
-              const payload = { author: this.author, text: this.text }
-              const res = await fetch('/api/comments', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-              })
-              if (res.ok) {
-                this.author = ''
-                this.text = ''
-                await this.load()
-              } else {
-                alert('Failed to post')
-              }
-            }
-          },
-          mounted() {
-            this.load()
-          }
-        }).mount('#app')
-        </script>
+      <body style="font-family:system-ui, -apple-system, 'Segoe UI', Roboto, 'Meiryo', sans-serif; margin:2rem">
+        <h1>Machi_tan</h1>
+        <p><a href="/teacher">先生用ページ</a> | <a href="/student">生徒用ページ</a></p>
       </body>
     </html>
     """
-    return Response(content=html, media_type="text/html")
+    return Response(content=html, media_type='text/html')
+
+
+@router.get('/teacher')
+async def teacher():
+    return Response(content=_read_static('teacher.html'), media_type='text/html')
+
+
+@router.get('/student')
+async def student():
+    return Response(content=_read_static('student.html'), media_type='text/html')

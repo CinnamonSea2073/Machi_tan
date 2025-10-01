@@ -4,6 +4,8 @@ from datetime import datetime
 from app.db import get_connection
 from app.groq_client import get_groq_client
 import uuid
+import os
+import traceback
 
 router = APIRouter()
 
@@ -48,8 +50,17 @@ async def groq_audio(file: UploadFile = File(...), user_id: str | None = None):
     content = await file.read()
     client = get_groq_client()
     now = datetime.utcnow().isoformat() + "Z"
+    # Debug: log upload size
+    try:
+        print(f"[groq_audio] received file={file.filename} bytes={len(content)}")
+    except Exception:
+        pass
+
+    # (Debug dump removed) - debug dumping was temporary
+
     if client is None:
-        transcript = f"(transcribed {len(content)} bytes)"
+        # Groq が設定されていない場合は明示的なフォールバックを返す
+        transcript = f"(groq not configured - uploaded {len(content)} bytes as {file.filename})"
     else:
         try:
             transcription = client.audio.transcriptions.create(
@@ -57,10 +68,55 @@ async def groq_audio(file: UploadFile = File(...), user_id: str | None = None):
                 model="whisper-large-v3-turbo",
                 response_format="verbose_json",
             )
-            # groq transcription object may vary; try to access text
-            transcript = getattr(transcription, "text", None) or transcription.get("text") if isinstance(transcription, dict) else str(transcription)
-        except Exception:
-            transcript = f"Groq audio error fallback ({file.filename})"
+            # groq transcription object may vary; try to extract text robustly
+            def extract_text(obj):
+                # direct attribute
+                try:
+                    t = getattr(obj, 'text', None)
+                    if t and isinstance(t, str) and t.strip():
+                        return t.strip()
+                except Exception:
+                    pass
+                # dict-like
+                if isinstance(obj, dict):
+                    # common shapes: {'text': '...'}
+                    if 'text' in obj and isinstance(obj['text'], str) and obj['text'].strip():
+                        return obj['text'].strip()
+                    # verbose_json style: {'results': [{'alternatives': [{'text': '...'}]}]}
+                    if 'results' in obj and isinstance(obj['results'], list):
+                        parts = []
+                        for r in obj['results']:
+                            if isinstance(r, dict):
+                                if 'alternatives' in r and isinstance(r['alternatives'], list):
+                                    alt = r['alternatives'][0]
+                                    if isinstance(alt, dict):
+                                        for k in ('text', 'transcript'):
+                                            if k in alt and isinstance(alt[k], str) and alt[k].strip():
+                                                parts.append(alt[k].strip())
+                                # some formats may put 'text' directly in result
+                                if 'text' in r and isinstance(r['text'], str) and r['text'].strip():
+                                    parts.append(r['text'].strip())
+                        if parts:
+                            return ' '.join(parts)
+                # fallback to string
+                try:
+                    s = str(obj)
+                    if s and s.strip() and s.strip() != '{}':
+                        return s.strip()
+                except Exception:
+                    pass
+                return None
+
+            transcript = extract_text(transcription) or ''
+            # if transcript is only punctuation or single dot, treat as empty
+            if transcript.strip() in ('.', ',', '。', '') or len(transcript.strip()) <= 1:
+                print(f"[groq_audio] transcription appears empty or too short: '{transcript}'")
+                transcript = ''
+        except Exception as exc:
+            # サーバーログに詳細を出力して障害原因追跡を容易にする
+            print(f"groq audio transcription error: {exc}")
+            traceback.print_exc()
+            transcript = f"(groq transcription failed - uploaded {file.filename})"
 
     conn = get_connection()
     cur = conn.cursor()
