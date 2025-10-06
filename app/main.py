@@ -11,6 +11,11 @@ app = FastAPI(title="Machi_tan", version="0.1.0")
 STATIC_DIR = Path(__file__).resolve().parent / 'static'
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+# Mount Vue app dist files for PWA
+VUE_DIST_DIR = Path(__file__).resolve().parent.parent / 'machi-vue' / 'dist'
+if VUE_DIST_DIR.exists():
+    app.mount("/app", StaticFiles(directory=str(VUE_DIST_DIR), html=True), name="vue_app")
+
 app.include_router(frontend.router, prefix="", tags=["frontend"])
 app.include_router(backend.router, prefix="/api", tags=["backend"])
 app.include_router(users.router, prefix="/api", tags=["users"])

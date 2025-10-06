@@ -1,4 +1,6 @@
 {
-  "preset": "minimal-2023",
-  "images": ["public/icon.svg"]
+    "preset": "minimal-2023",
+    "images": [
+        "public/icon.svg"
+    ]
 }
