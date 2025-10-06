@@ -30,17 +30,43 @@ export const tutorialStory = [
   { 
     title: 'たぬけん', 
     message: '『気づき』は、トランシーバーで\nぼくに報告してね！', 
-    character: 'https://lottie.host/f388a0b2-cce4-4681-a943-d8fb67a984d7/XfkX4AvJZo.json'
+    character: 'https://lottie.host/f388a0b2-cce4-4681-a943-d8fb67a984d7/XfkX4AvJZo.json',
+    showTransceiver: true,
+    transceiverInteractive: false
   },
   { 
     title: 'たぬけん', 
     message: 'トランシーバーを用意して！', 
-    character: 'https://lottie.host/98be370f-0447-4347-b2c1-8256fc4c440d/HdoBME0ofD.json'
+    character: 'https://lottie.host/98be370f-0447-4347-b2c1-8256fc4c440d/HdoBME0ofD.json',
+    showTransceiver: true,
+    transceiverInteractive: false
   },
   { 
     title: 'たぬけん', 
     message: 'ボタンをおしながら\n「じゅんびOK！」といってみよう', 
-    character: 'https://lottie.host/98be370f-0447-4347-b2c1-8256fc4c440d/HdoBME0ofD.json'
+    character: 'https://lottie.host/98be370f-0447-4347-b2c1-8256fc4c440d/HdoBME0ofD.json',
+    showTransceiver: true,
+    transceiverInteractive: true,
+    requireVoiceInput: true
+  },
+  { 
+    title: 'たぬけん', 
+    message: 'この「みずいろのまる」が\nきみのいるばしょだ！',
+    isMapStep: true,
+    mapFocus: 'user-position'
+  },
+  { 
+    title: 'たぬけん', 
+    message: 'ほしがでたな！\nだれかが報告してくれたみたいだ！',
+    isMapStep: true,
+    mapFocus: 'star',
+    showDummyStar: true
+  },
+  { 
+    title: 'たぬけん', 
+    message: 'この柏の葉をたんけんしてみんなで\nいろんなことを報告してくれ！',
+    isMapStep: true,
+    mapFocus: 'overview'
   },
   { 
     title: 'たぬけん', 
@@ -73,17 +99,14 @@ export function useTutorial() {
 
   // 次のステップに進む
   const nextStep = () => {
+    console.log(`nextStep呼び出し: 現在${currentStep.value}/${tutorialStory.length}`)
+    
     if (currentStep.value < tutorialStory.length) {
       currentStep.value++
       console.log(`ステップ進行: ${currentStep.value}/${tutorialStory.length}`)
-      // 最終ステップを超えた場合のみ完了フラグを設定
-      if (currentStep.value > tutorialStory.length) {
-        console.log('チュートリアル完了フラグ設定')
-        isCompleted.value = true
-      }
     } else {
-      // チュートリアル完了
-      console.log('チュートリアル完了（上限到達）')
+      // 既に最終ステップに達している場合は完了フラグを設定
+      console.log('チュートリアル完了（最終ステップ到達）')
       isCompleted.value = true
     }
   }

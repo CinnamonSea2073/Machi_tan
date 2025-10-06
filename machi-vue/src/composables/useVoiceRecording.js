@@ -1,4 +1,4 @@
-import { ref, onUnmounted } from 'vue'
+import { ref, computed, onUnmounted } from 'vue'
 
 export function useVoiceRecording() {
   // 状態管理
@@ -6,6 +6,13 @@ export function useVoiceRecording() {
   const isProcessing = ref(false)
   const levelPercent = ref(0)
   const debugInfo = ref('')
+  const lastRecognizedText = ref('')
+  const lastAiResponse = ref('')
+  
+  // 音声レベル計算（8段階）
+  const currentLevel = computed(() => {
+    return Math.min(8, Math.floor(levelPercent.value * 8))
+  })
   
   // 音声録音関連の変数
   let mediaStream = null
@@ -103,22 +110,33 @@ export function useVoiceRecording() {
     const buf = new Float32Array(analyser.fftSize)
     
     const loop = () => {
-      analyser.getFloatTimeDomainData(buf)
-      let sum = 0
-      for (let i = 0; i < buf.length; i++) {
-        const v = buf[i]
-        sum += v * v
+      // analyserがnullになった場合はループを停止
+      if (!analyser || !_measuring) {
+        console.log('Stopping measurement loop: analyser=', !!analyser, '_measuring=', _measuring)
+        return
       }
-      const rms = Math.sqrt(sum / buf.length)
-      lastRms = rms
       
-      // セッション中の最大値更新
-      if (rms > maxRms) maxRms = rms
-      
-      // メーター更新
-      updateMeter(rms)
-      
-      if (_measuring) requestAnimationFrame(loop)
+      try {
+        analyser.getFloatTimeDomainData(buf)
+        let sum = 0
+        for (let i = 0; i < buf.length; i++) {
+          const v = buf[i]
+          sum += v * v
+        }
+        const rms = Math.sqrt(sum / buf.length)
+        lastRms = rms
+        
+        // セッション中の最大値更新
+        if (rms > maxRms) maxRms = rms
+        
+        // メーター更新
+        updateMeter(rms)
+        
+        if (_measuring) requestAnimationFrame(loop)
+      } catch (error) {
+        console.error('Error in measurement loop:', error)
+        _measuring = false
+      }
     }
     requestAnimationFrame(loop)
   }
@@ -181,8 +199,9 @@ export function useVoiceRecording() {
   // 録音停止と送信
   const stopRecording = async () => {
     return new Promise((resolve, reject) => {
-      if (!recorder) {
-        reject(new Error('録音が開始されていません'))
+      if (!recorder || !isRecording.value) {
+        console.log('No active recording to stop')
+        resolve(null)
         return
       }
       
@@ -242,6 +261,13 @@ export function useVoiceRecording() {
           
           const jr = await r2.json()
           
+          // コメントとして保存（位置情報付き）
+          try {
+            await saveCommentWithLocation(transcript)
+          } catch (commentErr) {
+            console.warn('コメント保存に失敗しましたが、音声認識は成功しました:', commentErr)
+          }
+          
           resolve({
             transcript,
             response: jr.output || '応答がありません'
@@ -265,7 +291,140 @@ export function useVoiceRecording() {
     })
   }
 
-  // コメント保存
+  // 強制停止（緊急時用）
+  const forceStop = () => {
+    console.log('Force stopping recording... current states:', {
+      isRecording: isRecording.value,
+      isProcessing: isProcessing.value,
+      recorderState: recorder?.state,
+      _measuring
+    })
+    
+    // 全ての状態を即座にリセット
+    _measuring = false
+    
+    // 強制的にリアクティブ値を更新
+    const wasRecording = isRecording.value
+    const wasProcessing = isProcessing.value
+    
+    isRecording.value = false
+    isProcessing.value = false
+    levelPercent.value = 0
+    
+    console.log('State values set:', {
+      wasRecording,
+      wasProcessing,
+      nowRecording: isRecording.value,
+      nowProcessing: isProcessing.value
+    })
+    
+    // MediaRecorderを停止
+    if (recorder) {
+      try {
+        if (recorder.state === 'recording') {
+          recorder.stop()
+          console.log('MediaRecorder stopped')
+        }
+      } catch (err) {
+        console.warn('Error stopping recorder:', err)
+      }
+      recorder = null
+    }
+    
+    // オーディオリソースをクリーンアップ
+    if (sourceNode) {
+      try { 
+        sourceNode.disconnect() 
+        console.log('SourceNode disconnected')
+      } catch (_) {}
+      sourceNode = null
+    }
+    
+    if (audioCtx) {
+      try { 
+        audioCtx.close() 
+        console.log('AudioContext closed')
+      } catch (_) {}
+      audioCtx = null
+    }
+    
+    // その他の変数もリセット
+    chunks = []
+    analyser = null
+    
+    console.log('Force stop completed')
+  }
+
+  // 位置情報取得
+  const getCurrentPosition = () => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        resolve({ latitude: null, longitude: null })
+        return
+      }
+      
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+          })
+        },
+        (error) => {
+          console.warn('位置情報取得失敗:', error)
+          resolve({ latitude: null, longitude: null })
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 5000,
+          maximumAge: 30000
+        }
+      )
+    })
+  }
+
+  // コメント保存（位置情報付き）
+  const saveCommentWithLocation = async (text) => {
+    try {
+      const studentUuid = localStorage.getItem('studentUuid')
+      const studentName = localStorage.getItem('studentName') || 'Unknown'
+      
+      if (!studentUuid) {
+        console.warn('Student UUID not found')
+        return
+      }
+      
+      // 現在位置を取得
+      const position = await getCurrentPosition()
+      
+      const payload = {
+        user_id: studentUuid,
+        text: text,
+        student_id: studentUuid,
+        lat: position.latitude,
+        lon: position.longitude
+      }
+      
+      console.log('コメント保存データ:', payload)
+      
+      const res = await fetch('/api/comments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      
+      if (!res.ok) {
+        throw new Error(`Comment save failed: ${res.status}`)
+      }
+      
+      console.log('Comment saved successfully with location')
+    } catch (err) {
+      console.warn('saveCommentWithLocation failed', err)
+      throw err
+    }
+  }
+
+  // コメント保存（従来版・位置情報なし）
   const saveComment = async (text) => {
     try {
       const studentUuid = localStorage.getItem('studentUuid')
@@ -277,11 +436,11 @@ export function useVoiceRecording() {
       }
       
       const payload = {
+        user_id: studentUuid,
+        text: text,
         student_id: studentUuid,
-        student_name: studentName,
-        content: text,
-        latitude: null,
-        longitude: null
+        lat: null,
+        lon: null
       }
       
       const res = await fetch('/api/comments', {
@@ -325,12 +484,17 @@ export function useVoiceRecording() {
     isRecording,
     isProcessing,
     levelPercent,
+    currentLevel,
     debugInfo,
+    lastRecognizedText,
+    lastAiResponse,
     
     // メソッド
     startRecording,
     stopRecording,
+    forceStop,
     saveComment,
+    saveCommentWithLocation,
     cleanup
   }
 }
