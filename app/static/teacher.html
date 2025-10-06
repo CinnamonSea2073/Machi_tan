@@ -133,9 +133,17 @@
         if(lat === null || lon === null) return
         if(Number.isNaN(lat) || Number.isNaN(lon)) return
         if(teacherCommentMarkers[c.comment_id]) return
-        const icon = L.divIcon({className:'', html:'★', iconSize:[24,24], iconAnchor:[12,12]})
-        const m = L.marker([lat, lon], { icon }).addTo(courseMap)
-        m.bindPopup(`<strong>${c.student_name || c.user_id}</strong><br>${c.text}`)
+  const iconHtml = `
+    <div style="position:relative;width:40px;height:40px;display:flex;align-items:center;justify-content:center;">
+      <div style="position:absolute;width:40px;height:40px;border-radius:50%;background:rgba(255,215,0,0.18);box-shadow:0 2px 8px rgba(0,0,0,0.15);"></div>
+      <div style="color:#FFD700;font-size:22px;z-index:2;text-shadow:0 2px 6px rgba(0,0,0,0.35);">★</div>
+    </div>`
+  const icon = L.divIcon({className:'', html:iconHtml, iconSize:[40,40], iconAnchor:[20,20]})
+        const m = L.marker([lat, lon], { icon, zIndexOffset: 1000 }).addTo(courseMap)
+        let timeStr = ''
+        try{ timeStr = c.created_at ? new Date(c.created_at).toLocaleString('ja-JP') : '' }catch(e){}
+        const popupHtml = `<div style="min-width:160px"><strong>${c.student_name || c.user_id}</strong>${timeStr?`<div style=\"font-size:12px;color:#666\">${timeStr}</div>`:''}<div style=\"margin-top:6px\">${c.text}</div></div>`
+        m.bindPopup(popupHtml)
         teacherCommentMarkers[c.comment_id] = m
       }catch(e){console.warn('addTeacherCommentMarker failed', e)}
     }

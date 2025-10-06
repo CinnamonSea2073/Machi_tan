@@ -27,15 +27,47 @@
     .debug-marker{
       width:22px;height:22px;border-radius:22px;background:#e91e63;border:2px solid #fff;box-shadow:0 0 10px rgba(233,30,99,0.6)
     }
+    /* Tutorial bubble: use SVG background, thin border (2px), no shadows, and entrance scale animation */
+    .tutorial-bubble{
+      background:transparent;color:#111;border-radius:14px;padding:0;max-width:94vw;position:relative;box-sizing:border-box;display:inline-block;transform:translateY(-12px);
+      width:315px;max-width:94vw;
+      filter: drop-shadow(0 4px 0 #929292);
+    }
+    .tutorial-bubble .bubble-svg svg{width:100%;height:auto;display:block}
+    /* overlay content (text/form) centered over SVG, accounting for pointer triangle at bottom */
+    .tutorial-bubble .bubble-content{position:absolute;left:0;right:0;top:0;bottom:40px;display:flex;align-items:center;justify-content:center;padding:18px 20px;box-sizing:border-box}
+    .tutorial-bubble .bubble-text{font-size:16px;line-height:1.5;color:#111;text-align:center}
+
+    /* entrance animation: scale-only (no drop-shadow) */
+    @keyframes bubblePop {
+      0% { transform: translateY(6px) scale(0.98); opacity:0 }
+      60% { transform: translateY(-6px) scale(1.04); opacity:1 }
+      100% { transform: translateY(0) scale(1); opacity:1 }
+    }
+    .bubble-animate{ animation: bubblePop 420ms cubic-bezier(.22,.9,.5,1) both; transform-origin: center top }
   </style>
 </head>
 <body>
-  <!-- Tutorial screen (fullscreen, shown first) -->
-  <div id="tutorialScreen" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;font-family:sans-serif;padding:24px;box-sizing:border-box">
-    <div id="tutorialContent" style="max-width:600px;text-align:center;background:rgba(255,255,255,0.1);backdrop-filter:blur(12px);padding:48px 32px;border-radius:20px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
-      <h1 id="tutorialTitle" style="font-size:28px;margin-bottom:24px;font-weight:700">ようこそ、隊員!</h1>
-      <p id="tutorialMessage" style="font-size:18px;line-height:1.6;margin-bottom:32px">画面をタップして進めてください。</p>
-      <button id="tutorialNextBtn" style="background:#fff;color:#667eea;padding:14px 36px;border:none;border-radius:50px;font-size:16px;font-weight:600;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.15);transition:all 0.2s">次へ →</button>
+  <!-- Tutorial screen (fullscreen, shown first) - redesigned: character + speech bubble -->
+  <div id="tutorialScreen" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:#ffffff;z-index:9999;display:flex;align-items:center;justify-content:center;color:#111;font-family:sans-serif;padding:24px;box-sizing:border-box">
+    <div id="tutorialBox" style="width:360px;max-width:94vw;position:relative;display:flex;flex-direction:column;align-items:center;gap:20px">
+      <!-- speech bubble (moved above character) -->
+      <div id="tutorialBubble" class="tutorial-bubble">
+        <div class="bubble-svg">
+          <svg width="315" height="121" viewBox="0 0 315 121" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <g>
+              <path d="M304.075 0H10.9249C4.89123 0 4.34115e-06 4.87327 4.34115e-06 10.8848L0 78.461C0 84.4724 4.89123 89.3457 10.9249 89.3457H119.945C123.132 89.3457 126.189 90.6139 128.44 92.8706L148.72 113.199C153.518 118.009 161.348 117.88 165.985 112.915L184.441 93.1548C186.71 90.7251 189.886 89.3457 193.211 89.3457H304.075C310.109 89.3457 315 84.4724 315 78.461V10.8848C315 4.87327 310.109 0 304.075 0Z" fill="white"/>
+              <path d="M10.9248 1H304.075C309.56 1.00003 314 5.42905 314 10.8848V78.4609C314 83.9167 309.56 88.3457 304.075 88.3457H193.211C189.609 88.3457 186.168 89.8404 183.71 92.4727L165.255 112.232C161.004 116.784 153.826 116.902 149.428 112.493L129.148 92.1641C126.71 89.7195 123.398 88.3458 119.945 88.3457H10.9248C5.44001 88.3457 1 83.9167 1 78.4609V10.8848C1 5.59944 5.167 1.27752 10.4141 1.0127L10.9248 1Z" stroke="#929292" stroke-width="2"/>
+            </g>
+          </svg>
+        </div>
+        <div class="bubble-content">
+          <div id="tutorialBubbleText" class="bubble-text">画面をタップして進めてください。</div>
+        </div>
+      </div>
+
+      <!-- character placeholder (moved below bubble) -->
+      <div id="tutorialCharacter" style="width:210px;height:210px;border-radius:16px;background:#d9d9d9;display:flex;align-items:center;justify-content:center;"></div>      <div id="tutorialHint" style="font-size:13px;opacity:0.9;text-align:center;color:rgba(0,0,0,0.7)">どこでもタップで次へ</div>
     </div>
   </div>
 
@@ -58,44 +90,321 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="/static/common.js"></script>
+  <!-- lottie-web for character animation -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.9.6/lottie.min.js"></script>
   <script>
-    // Tutorial story messages
+    // Tutorial story messages with character animations
     const tutorialStory = [
-      { title: 'ようこそ、隊員!', message: 'あなたは新米の探検隊員です。これから大切なミッションに挑戦します。' },
-      { title: 'ミッション開始', message: '隊長からの指示を受け、地図上でルートを確認しながら進んでいきます。' },
-      { title: '音声レポート', message: '何か発見したら、🎤ボタンを長押しして音声で報告してください。' },
-      { title: '準備完了!', message: 'それでは、まずあなたの名前を教えてください。' }
+      { 
+        title: 'たぬけん', 
+        message: 'きょうは、たんけんをてつだいに\n来てくれて、ありがとう！', 
+        character: 'https://lottie.host/f388a0b2-cce4-4681-a943-d8fb67a984d7/XfkX4AvJZo.json'
+      },
+      { 
+        title: 'たぬけん', 
+        message: 'ぼくは『たぬけん』！よろしくね！！', 
+        character: 'https://lottie.host/f388a0b2-cce4-4681-a943-d8fb67a984d7/XfkX4AvJZo.json'
+      },
+      { 
+        title: 'たぬけん', 
+        message: 'きょうのたんけんルートは\n水にかんけいするいきもの。', 
+        character: 'https://lottie.host/98be370f-0447-4347-b2c1-8256fc4c440d/HdoBME0ofD.json'
+      },
+      { 
+        title: 'たぬけん', 
+        message: 'けれど、そのいきものがだれか\nぼくにもわからないんだ...', 
+        character: 'https://lottie.host/f26cbe82-399e-4375-aa69-d2f5ac331887/0wfU1QJrz7.json'
+      },
+      { 
+        title: 'たぬけん', 
+        message: '『気づき』をあつめていけば、\nだれかわかるかもしれないよ！', 
+        character: 'https://lottie.host/98be370f-0447-4347-b2c1-8256fc4c440d/HdoBME0ofD.json'
+      },
+      { 
+        title: 'たぬけん', 
+        message: '『気づき』は、トランシーバーで\nぼくに報告してね！', 
+        character: 'https://lottie.host/f388a0b2-cce4-4681-a943-d8fb67a984d7/XfkX4AvJZo.json'
+      },
+      { 
+        title: 'たぬけん', 
+        message: 'トランシーバーを用意して！', 
+        character: 'https://lottie.host/98be370f-0447-4347-b2c1-8256fc4c440d/HdoBME0ofD.json'
+      },
+      { 
+        title: 'たぬけん', 
+        message: 'ボタンをおしながら\n「じゅんびOK！」といってみよう', 
+        character: 'https://lottie.host/98be370f-0447-4347-b2c1-8256fc4c440d/HdoBME0ofD.json'
+      },
+      { 
+        title: 'たぬけん', 
+        message: 'さいごに、きみのなまえは？', 
+        character: 'https://lottie.host/f388a0b2-cce4-4681-a943-d8fb67a984d7/XfkX4AvJZo.json',
+        isNameInput: true
+      },
+      { 
+        title: 'たぬけん', 
+        message: 'それじゃあ、{name}\nきょうはよろしくね！', 
+        character: 'https://lottie.host/f388a0b2-cce4-4681-a943-d8fb67a984d7/XfkX4AvJZo.json',
+        isNameDisplay: true
+      }
     ]
     let tutorialStep = 0
+    // Lottie animation instances (preloaded)
+    let lottieAnim = null
+    let preloadedAnimations = {}
+    let currentAnimationUrl = null
+
+    // preload all character animations to avoid loading delays
+    function preloadAllAnimations() {
+      if(typeof lottie === 'undefined' || !lottie) {
+        setTimeout(preloadAllAnimations, 100)
+        return
+      }
+      
+      // collect unique animation URLs
+      const animationUrls = [...new Set(tutorialStory.map(s => s.character).filter(Boolean))]
+      console.log('Preloading animations:', animationUrls)
+      
+      let loadedCount = 0
+      animationUrls.forEach(url => {
+        fetch(url).then(r => r.json()).then(data => {
+          preloadedAnimations[url] = data
+          loadedCount++
+          console.log(`Preloaded animation ${loadedCount}/${animationUrls.length}: ${url}`)
+          
+          // when all loaded, start with first animation
+          if(loadedCount === animationUrls.length) {
+            console.log('All animations preloaded, initializing first character')
+            initializeFirstCharacter()
+          }
+        }).catch(e => {
+          console.warn('Failed to preload animation:', url, e)
+          loadedCount++
+          if(loadedCount === animationUrls.length) {
+            initializeFirstCharacter()
+          }
+        })
+      })
+    }
+    
+    function initializeFirstCharacter() {
+      const lottieContainer = document.createElement('div')
+      lottieContainer.id = 'lottieCharacter'
+      lottieContainer.style.width = '210px'
+      lottieContainer.style.height = '210px'
+      lottieContainer.style.display = 'flex'
+      lottieContainer.style.alignItems = 'center'
+      lottieContainer.style.justifyContent = 'center'
+      lottieContainer.style.pointerEvents = 'none'
+      
+      const char = document.getElementById('tutorialCharacter')
+      if(char){ char.innerHTML = ''; char.appendChild(lottieContainer) }
+      
+      // load first character animation
+      if(tutorialStory[0] && tutorialStory[0].character) {
+        switchToCharacter(tutorialStory[0].character)
+      }
+    }
+    
+    // call preload after a short delay to ensure DOM and lottie lib are ready
+    setTimeout(preloadAllAnimations, 50)
+    
+    // function to instantly switch to preloaded character animation
+    function switchToCharacter(url) {
+      if(!url || url === currentAnimationUrl) return
+      
+      const lottieContainer = document.getElementById('lottieCharacter')
+      if(!lottieContainer) return
+      
+      try {
+        // destroy existing animation
+        if(lottieAnim) {
+          try { lottieAnim.destroy() } catch(e) {}
+        }
+        
+        // clear container
+        lottieContainer.innerHTML = ''
+        
+        // use preloaded data if available
+        if(preloadedAnimations[url]) {
+          lottieAnim = lottie.loadAnimation({
+            container: lottieContainer,
+            renderer: 'svg',
+            loop: false,
+            autoplay: false,
+            animationData: preloadedAnimations[url]
+          })
+          window.lottieAnim = lottieAnim
+          currentAnimationUrl = url
+          console.log('Switched to preloaded character:', url)
+          
+          // play animation
+          setTimeout(()=>{
+            if(lottieAnim) {
+              try { lottieAnim.goToAndPlay(0, true) } catch(e) {}
+            }
+          }, 50)
+        } else {
+          // fallback: show placeholder if not preloaded
+          console.warn('Animation not preloaded:', url)
+          lottieContainer.innerHTML = '<div style="font-size:24px;color:#666;display:flex;align-items:center;justify-content:center;width:100%;height:100%;">た</div>'
+        }
+      } catch(e) {
+        console.warn('switchToCharacter error:', e)
+      }
+    }
+    
+    // function to complete tutorial and show map
+    async function completeNameRegistration() {
+      // Register with API
+      await registerStudentWithAPI()
+      // Show map
+      document.getElementById('tutorialScreen').style.display = 'none'
+      document.getElementById('map').style.display = 'block'
+      document.getElementById('voiceBtn').style.display = 'block'
+      document.getElementById('levelMeterRoot').style.display = 'block'
+      if (!mapInitialized) initMap()
+      loadTodayCourse()
+    }
 
     function showTutorialStep(step) {
+      const box = document.getElementById('tutorialBox')
+      const char = document.getElementById('tutorialCharacter')
+      const bubbleText = document.getElementById('tutorialBubbleText')
+      const bubble = document.getElementById('tutorialBubble')
+      
+      console.log('showTutorialStep called with step:', step, 'total steps:', tutorialStory.length)
+      
       if (step >= tutorialStory.length) {
-        // show name registration form
-        showNameRegistration()
+        // end of tutorial, proceed to map
+        console.log('Tutorial completed, proceeding to map')
+        completeNameRegistration()
         return
       }
       const s = tutorialStory[step]
-      document.getElementById('tutorialTitle').textContent = s.title
-      document.getElementById('tutorialMessage').textContent = s.message
-    }
-
-    function showNameRegistration() {
-      const content = document.getElementById('tutorialContent')
-      content.innerHTML = `
-        <h1 style="font-size:28px;margin-bottom:24px;font-weight:700">名前を登録</h1>
-        <p style="font-size:16px;margin-bottom:20px">あなたの名前を入力してください</p>
-        <input type="text" id="studentNameInput" placeholder="例: 山田太郎" style="width:100%;max-width:300px;padding:12px 16px;border:none;border-radius:8px;font-size:16px;margin-bottom:20px;box-sizing:border-box" />
-        <button id="registerNameBtn" style="background:#fff;color:#667eea;padding:14px 36px;border:none;border-radius:50px;font-size:16px;font-weight:600;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.15);transition:all 0.2s">登録して開始</button>
-      `
-      document.getElementById('registerNameBtn').addEventListener('click', registerStudent)
-    }
-
-    async function registerStudent() {
-      const name = document.getElementById('studentNameInput').value.trim()
-      if (!name) {
-        alert('名前を入力してください')
+      
+      // handle special steps
+      if(s.isNameInput) {
+        // show message in bubble first
+        if(bubbleText) bubbleText.innerHTML = s.message.replace(/\n/g, '<br>')
+        showNameInputForm()
         return
       }
+      
+      if(s.isNameDisplay) {
+        console.log('Processing isNameDisplay step')
+        const playerName = localStorage.getItem('studentName') || 'たんけんたい'
+        console.log('Player name from localStorage:', playerName)
+        const displayMessage = s.message.replace('{name}', playerName)
+        console.log('Display message:', displayMessage)
+        if(bubbleText) bubbleText.innerHTML = displayMessage.replace(/\n/g, '<br>')
+        // Update hint to indicate this is the final step
+        const hint = document.getElementById('tutorialHint')
+        if(hint) {
+          hint.textContent = 'タップしてたんけんを開始！'
+          console.log('Updated hint text')
+        }
+      } else {
+        if(bubbleText) bubbleText.innerHTML = s.message.replace(/\n/g, '<br>')
+      }
+      
+      // switch character animation if different from current
+      if(s.character) {
+        switchToCharacter(s.character)
+      }
+      // trigger entrance animation on the bubble
+      try{
+        if(bubble){ bubble.classList.remove('bubble-animate'); void bubble.offsetWidth; bubble.classList.add('bubble-animate') }
+        // remove animation class after it finishes so it can replay next step
+        setTimeout(()=>{ try{ if(bubble) bubble.classList.remove('bubble-animate') }catch(_){} }, 600)
+      }catch(e){/* ignore */}
+      // play lottie animation (if available) when step advances
+      try{
+        const anim = window.lottieAnim || lottieAnim
+        console.log('Trying to play Lottie animation, anim=', anim)
+        if(anim && typeof anim.goToAndPlay === 'function'){
+          anim.goToAndPlay(0, true)
+          console.log('Lottie animation started from frame 0')
+        } else if(anim && typeof anim.play === 'function'){
+          anim.goToAndStop(0, true)
+          anim.play()
+          console.log('Lottie animation played with fallback method')
+        } else {
+          console.warn('No valid Lottie animation instance found')
+        }
+      }catch(e){console.warn('Lottie play error:', e)}
+    }
+
+    function showNameInputForm() {
+      // Create name input form in fixed position to avoid layout changes
+      const tutorialScreen = document.getElementById('tutorialScreen')
+      if(!tutorialScreen) return
+      
+      // Remove existing name form if present
+      const existingForm = document.getElementById('nameInputForm')
+      if(existingForm) existingForm.remove()
+      
+      // Create form element with fixed positioning
+      const nameForm = document.createElement('div')
+      nameForm.id = 'nameInputForm'
+      nameForm.style.cssText = `
+        position: fixed;
+        bottom: 120px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1000;
+        text-align:center;
+        padding:20px;
+        background:rgba(255,255,255,0.95);
+        border-radius:12px;
+        box-shadow:0 4px 12px rgba(0,0,0,0.15);
+        max-width: 300px;
+        width: 90%;
+      `
+      nameForm.innerHTML = `
+        <div style="margin-bottom:12px;font-size:16px;color:#333">あなたの名前を入力してください</div>
+        <input type="text" id="studentNameInput" placeholder="例: 山田太郎" style="width:100%;max-width:260px;padding:12px 16px;border:2px solid #e5e5e5;border-radius:8px;font-size:16px;margin-bottom:16px;box-sizing:border-box;text-align:center" />
+        <div>
+          <button id="registerNameBtn" style="background:#667eea;color:#fff;padding:12px 24px;border:none;border-radius:8px;font-size:16px;cursor:pointer;font-weight:600">登録して次へ</button>
+        </div>
+      `
+      
+      // Insert form in tutorial screen without affecting layout
+      tutorialScreen.appendChild(nameForm)
+      
+      // Attach event listener
+      const btn = document.getElementById('registerNameBtn')
+      if(btn) {
+        btn.addEventListener('click', (event)=>{
+          // Prevent event bubbling to tutorial tap handler
+          event.stopPropagation()
+          
+          const name = document.getElementById('studentNameInput').value.trim()
+          if (!name) {
+            alert('名前を入力してください')
+            return
+          }
+          // Store name and remove form
+          localStorage.setItem('studentName', name)
+          console.log('Name registered:', name)
+          nameForm.remove()
+          // Move to final greeting step (Step 10 = index 9)
+          tutorialStep = 9
+          console.log('Moving to step 9 (Step 10), tutorialStep is now:', tutorialStep)
+          showTutorialStep(tutorialStep)
+        })
+      }
+      
+      // Focus input
+      setTimeout(()=>{
+        const input = document.getElementById('studentNameInput')
+        if(input) input.focus()
+      }, 100)
+    }
+
+    async function registerStudentWithAPI() {
+      const name = localStorage.getItem('studentName')
+      if (!name) return
       try {
         // Call API to register student and get UUID
         const res = await fetch('/api/students', {
@@ -108,26 +417,39 @@
         const studentUuid = data.student_id
         // Store UUID in localStorage
         localStorage.setItem('studentUuid', studentUuid)
-        localStorage.setItem('studentName', name)
-        // Hide tutorial and show map
-        document.getElementById('tutorialScreen').style.display = 'none'
-        document.getElementById('map').style.display = 'block'
-        document.getElementById('voiceBtn').style.display = 'block'
-        document.getElementById('levelMeterRoot').style.display = 'block'
-        // Initialize map after tutorial
-        initMap()
-        // load today's course onto the map
-        loadTodayCourse()
       } catch (err) {
-        console.error(err)
-        alert('登録エラー: ' + err.message)
+        console.error('Student registration error:', err)
+        // Continue even if API fails - use local name
       }
     }
 
-    document.getElementById('tutorialNextBtn').addEventListener('click', () => {
-      tutorialStep++
-      showTutorialStep(tutorialStep)
-    })
+    const tutorialNextBtn = document.getElementById('tutorialNextBtn')
+    if(tutorialNextBtn){
+      tutorialNextBtn.addEventListener('click', () => {
+        tutorialStep++
+        showTutorialStep(tutorialStep)
+      })
+    }
+
+    // New: advance tutorial on tap anywhere on the tutorial screen
+    function attachTutorialTap(){
+      const ts = document.getElementById('tutorialScreen')
+      if(!ts) return
+      // remove existing to avoid double-binding
+      try{ ts.removeEventListener('click', window.__tutorialTapHandler) }catch(e){}
+      window.__tutorialTapHandler = function(ev){ 
+        // Don't advance if name input form is visible
+        if(document.getElementById('nameInputForm')) return;
+        // Don't advance if name input is visible (fallback check)
+        if(document.getElementById('studentNameInput')) return; 
+        tutorialStep++; 
+        showTutorialStep(tutorialStep) 
+      }
+      ts.addEventListener('click', window.__tutorialTapHandler)
+    }
+    attachTutorialTap()
+    // fallback: ensure attachment after DOM ready
+    document.addEventListener('DOMContentLoaded', ()=>{ setTimeout(attachTutorialTap, 50) })
 
     async function saveComment(text){
       const studentUuid = localStorage.getItem('studentUuid') || null
@@ -161,9 +483,18 @@
         if(Number.isNaN(lat) || Number.isNaN(lon)) return
         // avoid duplicate
         if(commentMarkers[comment.comment_id]) return
-        const starIcon = L.divIcon({className:'', html:'★', iconSize:[24,24], iconAnchor:[12,12]})
-        const m = L.marker([lat, lon], { icon: starIcon }).addTo(map)
-        m.bindPopup(`<strong>${comment.student_name || comment.user_id}</strong><br>${comment.text}`)
+  const starHtml = `
+    <div style="position:relative;width:40px;height:40px;display:flex;align-items:center;justify-content:center;">
+      <div style="position:absolute;width:40px;height:40px;border-radius:50%;background:rgba(255,215,0,0.18);box-shadow:0 2px 8px rgba(0,0,0,0.15);"></div>
+      <div style="color:#FFD700;font-size:22px;z-index:2;text-shadow:0 2px 6px rgba(0,0,0,0.35);">★</div>
+    </div>`
+  const starIcon = L.divIcon({className:'', html:starHtml, iconSize:[40,40], iconAnchor:[20,20]})
+  const m = L.marker([lat, lon], { icon: starIcon, zIndexOffset: 1000 }).addTo(map)
+        // format popup with student name and timestamp
+        let timeStr = ''
+        try{ timeStr = comment.created_at ? new Date(comment.created_at).toLocaleString('ja-JP') : '' }catch(e){}
+        const popupHtml = `<div style="min-width:160px"><strong>${comment.student_name || comment.user_id}</strong>${timeStr?`<div style=\"font-size:12px;color:#666\">${timeStr}</div>`:''}<div style=\"margin-top:6px\">${comment.text}</div></div>`
+        m.bindPopup(popupHtml)
         commentMarkers[comment.comment_id] = m
       }catch(e){console.warn('addCommentMarker error', e)}
     }
@@ -247,8 +578,17 @@
       // current position marker (blue circle) is handled by top-level updatePos()
 
       if(navigator.geolocation){
-        navigator.geolocation.getCurrentPosition(p=>updatePos(p.coords.latitude,p.coords.longitude))
-        navigator.geolocation.watchPosition(p=>updatePos(p.coords.latitude,p.coords.longitude))
+        const geoOptions = { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 };
+        navigator.geolocation.getCurrentPosition(
+          p => updatePos(p.coords.latitude, p.coords.longitude),
+          e => console.warn('geolocation.getCurrentPosition error', e),
+          geoOptions
+        );
+        navigator.geolocation.watchPosition(
+          p => updatePos(p.coords.latitude, p.coords.longitude),
+          e => console.warn('geolocation.watchPosition error', e),
+          geoOptions
+        );
       }
       // load existing comment markers
       setTimeout(()=>{ try{ loadExistingComments() }catch(e){} }, 500)

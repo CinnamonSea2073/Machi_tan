@@ -2,6 +2,7 @@ import sqlite3
 from pathlib import Path
 from typing import Generator
 from datetime import datetime
+import sys
 
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "app.db"
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -35,16 +36,21 @@ def init_db() -> None:
     # Ensure lat/lon columns exist for comments (store location of comment)
     cur.execute("PRAGMA table_info(comments)")
     cols = [r[1] for r in cur.fetchall()]
+    print(f"[init_db] comments columns before migration: {cols}")
     if 'lat' not in cols:
         try:
             cur.execute("ALTER TABLE comments ADD COLUMN lat REAL")
+            print("[init_db] added column: lat")
         except Exception:
-            pass
+            e = sys.exc_info()[1]
+            print(f"[init_db] failed to add column lat: {e}")
     if 'lon' not in cols:
         try:
             cur.execute("ALTER TABLE comments ADD COLUMN lon REAL")
+            print("[init_db] added column: lon")
         except Exception:
-            pass
+            e = sys.exc_info()[1]
+            print(f"[init_db] failed to add column lon: {e}")
 
     # users table for mapping name to uuid
     cur.execute(
@@ -137,5 +143,6 @@ def iter_conn() -> Generator[sqlite3.Connection, None, None]:
 try:
     init_db()
 except Exception:
-    # ignore errors during import-time initialization; runtime startup will also init
-    pass
+    e = sys.exc_info()[1]
+    # do not raise here, but print the error so migration issues are visible during import
+    print(f"[init_db] import-time init_db() raised exception: {e}")
