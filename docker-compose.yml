@@ -10,7 +10,7 @@ services:
       - PORT=8000
       - PYTHONPATH=/app
     volumes:
-      - ./:/app:rw
+      - ./data:/app/data:rw
 
   cloudflared:
     image: cloudflare/cloudflared:latest

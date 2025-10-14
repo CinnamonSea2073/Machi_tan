@@ -66,6 +66,7 @@ async def groq_audio(file: UploadFile = File(...), user_id: str | None = None):
             transcription = client.audio.transcriptions.create(
                 file=(file.filename, content),
                 model="whisper-large-v3-turbo",
+                language="ja",
                 response_format="verbose_json",
             )
             # groq transcription object may vary; try to extract text robustly

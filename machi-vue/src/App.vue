@@ -1,5 +1,5 @@
 <template>
-  <div id="app">
+  <div id="app" :class="{ 'teacher-mode': isTeacherMode }">
     <!-- 先生用ページ -->
     <TeacherScreen v-if="isTeacherMode" />
     
@@ -136,11 +136,20 @@ watch(currentStatus, (newStatus, oldStatus) => {
     console.log('チュートリアルステータスが設定されました。チュートリアルを開始します。')
   }
 })
+
 </script>
 
 <style scoped>
 #app {
   width: 100vw;
-  height: 100vh;
+  height: 100vh; /* 学生画面（フルスクリーン前提） */
+}
+
+/* 教師モード時はページ全体をスクロール可能にする */
+#app.teacher-mode {
+  height: auto;
+  min-height: 100svh; /* モバイルのアドレスバー考慮 */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch; /* iOS スムーズスクロール */
 }
 </style>

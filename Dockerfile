@@ -1,12 +1,13 @@
 # Multi-stage build: Build Vue app first
-FROM node:18-alpine as vue-builder
+FROM node:20-alpine as vue-builder
 
 WORKDIR /vue-app
 
-# Copy Vue app files
+# Copy Vue app package files and install dependencies
 COPY machi-vue/package*.json ./
-RUN npm ci --only=production
+RUN npm ci --verbose
 
+# Copy Vue app source and build
 COPY machi-vue/ ./
 RUN npm run build
 

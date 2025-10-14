@@ -498,9 +498,10 @@ onUnmounted(() => {
 
 <style scoped>
 .teacher-screen {
-  min-height: 100vh;
+  min-height: auto;
   background: #f5f5f5;
-  padding: 20px 0;
+  padding: 20px 0 40px;
+  overflow: visible;
 }
 
 .container {

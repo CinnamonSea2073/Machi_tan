@@ -3,9 +3,11 @@ import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  base: '/app/',
   plugins: [
     vue(),
     VitePWA({
+      injectRegister: null,
       registerType: 'autoUpdate',
       workbox: {
         cleanupOutdatedCaches: true,
@@ -20,8 +22,8 @@ export default defineConfig({
         background_color: '#ffffff',
         display: 'fullscreen',
         orientation: 'portrait',
-        scope: '/',
-        start_url: '/',
+        scope: '/app/',
+        start_url: '/app/',
         icons: [
           {
             src: 'pwa-192x192.png',
