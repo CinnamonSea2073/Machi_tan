@@ -111,9 +111,6 @@ Machi_tan/
 ├── docker-compose.yml          # サービス構成
 ├── requirements.txt            # Python 依存関係
 ├── .dockerignore              # Docker ビルド除外設定
-├── CLOUDFLARE_DEPLOYMENT.md   # デプロイ手順書
-├── FUNCTIONALITY_CHECKLIST.md # 機能チェックリスト
-├── REFACTORING_PLAN.md        # リファクタリング計画
 ├── sample_course.gpx          # サンプルコースファイル
 ├── test_course.gpx            # テスト用コースファイル
 └── README.md                  # このファイル
@@ -146,7 +143,7 @@ docker compose up --build
 ```
 
 4. **アクセス確認**
-- **教師用画面（レガシー）**: http://localhost:8000/teacher
+- **教師用画面（レガシー）**: http://localhost:8000/app?mode=teacher
 - **学生用PWA**: http://localhost:8000/app/
 - **API ドキュメント**: http://localhost:8000/docs
 - **ヘルスチェック**: http://localhost:8000/healthz
