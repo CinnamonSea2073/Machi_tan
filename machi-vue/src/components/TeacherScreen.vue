@@ -497,11 +497,15 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+* {
+  box-sizing: border-box;
+}
+
 .teacher-screen {
-  min-height: auto;
+  height: 100vh;
   background: #f5f5f5;
   padding: 20px 0 40px;
-  overflow: visible;
+  overflow: auto;
 }
 
 .container {

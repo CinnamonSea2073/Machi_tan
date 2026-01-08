@@ -7,10 +7,6 @@ from app.db import init_db
 
 app = FastAPI(title="Machi_tan", version="0.1.0")
 
-# Mount static files
-STATIC_DIR = Path(__file__).resolve().parent / 'static'
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-
 # Mount Vue app dist files for PWA
 VUE_DIST_DIR = Path(__file__).resolve().parent.parent / 'machi-vue' / 'dist'
 if VUE_DIST_DIR.exists():

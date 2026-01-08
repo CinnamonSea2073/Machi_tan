@@ -21,19 +21,10 @@ async def index():
         <title>Machi_tan</title>
       </head>
       <body style="font-family:system-ui, -apple-system, 'Segoe UI', Roboto, 'Meiryo', sans-serif; margin:2rem">
-        <h1>Machi_tan</h1>
-        <p><a href="/teacher">先生用ページ</a> | <a href="/student">生徒用ページ</a></p>
+        <h1>Machi_tan v2</h1>
+        <p><a href="app?mode=teacher">先生用ページ</a> | <a href="app">生徒用ページ</a></p>
       </body>
     </html>
     """
     return Response(content=html, media_type='text/html')
 
-
-@router.get('/teacher')
-async def teacher():
-    return Response(content=_read_static('teacher.html'), media_type='text/html')
-
-
-@router.get('/student')
-async def student():
-    return Response(content=_read_static('student.html'), media_type='text/html')
